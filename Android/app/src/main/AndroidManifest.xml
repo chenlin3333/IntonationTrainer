@@ -5,8 +5,6 @@
     <!-- Microphone permission required for pitch detection -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Internet permission (for potential future features like cloud analytics) -->
-    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"

@@ -1,141 +1,69 @@
 package com.example.intonationtrainer.core.audio
 
-import com.example.intonationtrainer.core.pitchdetector.AutocorrelationPitchDetector
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlin.concurrent.thread
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import com.example.intonationtrainer.core.session.MicrophoneSession
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.log10
+import kotlin.math.sqrt
 
-/**
- * Captures audio from the device microphone and yields short-time audio buffers.
- */
-class AudioRecorderSource(
-    private val sampleRate: Int = 48000,
-    private val channelConfig: Int = AudioFormat.CHANNEL_IN_STEREO,
-    private val bufferSize: Int = 2048
-) {
+/** Each capture owns its recorder. A single worker releases it before starting another. */
+class AudioRecorderSource : MicrophoneSession.Capture {
+    private val worker = Executors.newSingleThreadExecutor()
+    private val main = Handler(Looper.getMainLooper())
+    private val generation = AtomicInteger()
 
-    companion object {
-        const val TAG = "AudioRecorderSource"
-
-    }
-
-    private fun validateBufferSize(bufferSize: Int): Int {
-        val minimum = AudioRecord.getMinBufferSize(
-            sampleRate, channelConfig, AudioFormat.ENCODING_PCM_16BIT
-        )
-        require(minimum > 0) { "Unsupported audio recording configuration" }
-        return bufferSize.coerceAtLeast(minimum)
-    }
-
-    private var audioRecord: AudioRecord? = try {
-        val actualBufferSize = validateBufferSize(bufferSize)
-        AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            sampleRate,
-            channelConfig,
-            AudioFormat.ENCODING_PCM_16BIT,
-            actualBufferSize
-        ).apply {
-            check(state == AudioRecord.STATE_INITIALIZED) { "Audio record not initialized" }
-        }
-    } catch (e: SecurityException) {
-        null
-    } catch (e: Exception) {
-        null
-    }
-
-    private val _audioBuffers = MutableStateFlow<List<ShortArray>>(emptyList())
-    val audioBuffers = _audioBuffers.asStateFlow()
-
-    var isRecording: Boolean = false
-
-    fun startRecording(): Result<Unit> {
-        val audioRecord = audioRecord
-        if (audioRecord == null) return Result.failure(RuntimeException("Audio record not initialized"))
-        try {
-            audioRecord.startRecording()
-            isRecording = true
-            _audioBuffers.value = emptyList()
-            thread(name = "AudioCaptureThread") {
-                processAudioStream()
-            }
-            return Result.success(Unit)
-        } catch (e: Exception) {
-            return Result.failure(e)
-        }
-    }
-
-    private fun processAudioStream() {
-        val buffer = ShortArray(bufferSize)
-
-        while (isRecording && !Thread.currentThread().isInterrupted) {
+    override fun start(onStarted: () -> Unit, onLevel: (Float) -> Unit, onError: (String) -> Unit) {
+        val token = generation.incrementAndGet()
+        worker.execute {
+            var recorder: AudioRecord? = null
+            fun post(action: () -> Unit) { main.post { if (generation.get() == token) action() } }
             try {
-                val readCount: Int = audioRecord?.read(buffer, 0, bufferSize) ?: -1
-                if (readCount > 0) {
-                    _audioBuffers.value = listOf(buffer.copyOf(readCount))
-                } else if (readCount < 0) {
-                    Thread.currentThread().interrupt()
-                    break
+                if (generation.get() != token) return@execute
+                val rate = 48000
+                val minimumBytes = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+                check(minimumBytes > 0) { "This microphone does not support 48 kHz capture." }
+                val input = AudioRecord(MediaRecorder.AudioSource.MIC, rate, AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT, maxOf(minimumBytes, 4096))
+                recorder = input
+                check(input.state == AudioRecord.STATE_INITIALIZED) { "Microphone could not be initialized." }
+                if (generation.get() != token) return@execute
+                input.startRecording()
+                check(input.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Microphone could not start." }
+                post(onStarted)
+                val samples = ShortArray(2048)
+                var lastLevel = 0L
+                while (generation.get() == token) {
+                    if (Build.VERSION.SDK_INT >= 29 && input.activeRecordingConfiguration?.isClientSilenced == true) {
+                        error("Microphone was interrupted by another app. Tap Retry when it is available.")
+                    }
+                    val count = input.read(samples, 0, samples.size, AudioRecord.READ_NON_BLOCKING)
+                    check(count >= 0) { "Microphone capture failed ($count). Tap Retry." }
+                    if (count > 0 && System.nanoTime() - lastLevel >= 100_000_000L) {
+                        var energy = 0.0
+                        for (i in 0 until count) { val value = samples[i] / 32768.0; energy += value * value }
+                        val db = (20 * log10(sqrt(energy / count).coerceAtLeast(0.00003162))).toFloat().coerceIn(-90f, 0f)
+                        post { onLevel(db) }
+                        lastLevel = System.nanoTime()
+                    }
+                    Thread.sleep(10)
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Thread.currentThread().interrupt()
-                break
+            } catch (error: Exception) {
+                post { onError(error.message ?: "Microphone unavailable. Tap Retry.") }
+            } finally {
+                recorder?.let { input ->
+                    try { if (input.recordingState == AudioRecord.RECORDSTATE_RECORDING) input.stop() }
+                    finally { input.release() }
+                }
             }
         }
     }
 
-    fun stopRecording(): Result<Unit> {
-        isRecording = false
-        audioRecord?.stop()
-        audioRecord?.release()
-        audioRecord = null
-        _audioBuffers.value = emptyList()
-        return Result.success(Unit)
-    }
-
-    fun getLatestBuffer(): ShortArray? {
-        val buffers = _audioBuffers.value
-        return if (buffers.isEmpty()) null else buffers.lastOrNull()
-    }
-
-}
-
-/** Helper to convert pitch detector result to PitchFrame */
-object PitchFrameConverter {
-
-    fun createPitchFrame(
-        samples: ShortArray,
-        sampleRate: Float = 48000.0f,
-        volumeDb: Float = -60.0f,
-        detector: AutocorrelationPitchDetector
-    ): com.example.intonationtrainer.core.model.PitchFrame {
-        val analysisResult = detector.detectPitch(samples, sampleRate)
-
-        if (analysisResult.frequency <= 0f) {
-            return com.example.intonationtrainer.core.model.PitchFrame(
-                timestamp = System.currentTimeMillis(),
-                frequency = 0f,
-                noteName = "Silence",
-                deviationCents = -1f,
-                confidence = 0f,
-                volumeDb = volumeDb
-            )
-        }
-
-        val noteAnalysis = detector.analyzeNote(analysisResult.frequency)
-
-        return com.example.intonationtrainer.core.model.PitchFrame(
-            timestamp = System.currentTimeMillis(),
-            frequency = analysisResult.frequency,
-            noteName = noteAnalysis.noteName,
-            deviationCents = noteAnalysis.deviationCents,
-            confidence = analysisResult.confidence,
-            volumeDb = volumeDb
-        )
-    }
-
+    override fun stop() { generation.incrementAndGet() }
+    fun close() { stop(); worker.shutdown() }
 }

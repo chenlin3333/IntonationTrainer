@@ -1,157 +1,107 @@
 package com.example.intonationtrainer
 
-import kotlin.concurrent.thread
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import com.example.intonationtrainer.core.audio.AudioRecorderSource
-import com.example.intonationtrainer.core.audio.PitchFrameConverter
-import com.example.intonationtrainer.core.model.PitchStream
-import com.example.intonationtrainer.core.pitchdetector.AutocorrelationPitchDetector
-import com.example.intonationtrainer.ui.screens.pitchvisualizer.PitchVisualizerScreen
+import com.example.intonationtrainer.core.session.MicrophoneSession
 import com.example.intonationtrainer.ui.theme.IntonationTrainerTheme
 
 class MainActivity : ComponentActivity() {
+    private val capture by lazy { AudioRecorderSource() }
+    private var state by mutableStateOf(MicrophoneSession.State())
+    private var permissionPending by mutableStateOf(false)
+    private val session by lazy { MicrophoneSession(capture) { state = it; if (it.phase == MicrophoneSession.Phase.ERROR) abandonFocus() } }
+    private val audioManager by lazy { getSystemService(AudioManager::class.java) }
+    private var focusRequest: AudioFocusRequest? = null
+    private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        if (change < 0) runOnUiThread { stop("Audio interrupted. Tap Start listening to resume.") }
+    }
+    private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val stillRequested = permissionPending
+        permissionPending = false
+        if (stillRequested && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            if (granted) startCapture()
+            else session.fail("Microphone permission is required. Allow it in Settings, then tap Retry.")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
         setContent {
             IntonationTrainerTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    PitchVisualizerScreen(
-                        onMicToggleClick = { toggleRecording() },
-                        isRecording = isRecording,
-                        currentPitchFrame = currentPitchFrame,
-                        recentFrames = recentFrames
-                    )
+                Scaffold { padding ->
+                    Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Text("Intonation Trainer", style = MaterialTheme.typography.headlineLarge)
+                        Text("Microphone check", style = MaterialTheme.typography.titleLarge)
+                        Text(if (permissionPending) "Waiting for microphone permission…" else state.message)
+                        if (state.phase == MicrophoneSession.Phase.LISTENING) {
+                            Text("Input level: %.0f dBFS".format(state.levelDb))
+                            LinearProgressIndicator(progress = { ((state.levelDb + 90f) / 90f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                        }
+                        Text("Play or sing to check the input level. Pitch detection and practice modes are coming next.")
+                        val active = state.phase == MicrophoneSession.Phase.STARTING || state.phase == MicrophoneSession.Phase.LISTENING
+                        Button(onClick = { if (active) stop() else requestStart() }, enabled = !permissionPending) {
+                            Text(if (active) "Stop listening" else if (state.phase == MicrophoneSession.Phase.ERROR) "Retry" else "Start listening")
+                        }
+                        if (state.phase == MicrophoneSession.Phase.ERROR) {
+                            TextButton(onClick = { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }) { Text("Open Settings") }
+                        }
+                    }
                 }
             }
         }
     }
 
-    // --- State & Lifecycle ---
-
-    private val _isRecording = mutableStateOf(false)
-    var isRecording: Boolean
-        get() = _isRecording.value
-        set(value) { _isRecording.value = value }
-
-    private val _currentFrame = mutableStateOf<com.example.intonationtrainer.core.model.PitchFrame?>(null)
-    var currentPitchFrame: com.example.intonationtrainer.core.model.PitchFrame?
-        get() = _currentFrame.value
-        set(value) { _currentFrame.value = value }
-
-    private val _recentFrames = mutableStateOf<List<com.example.intonationtrainer.core.model.PitchFrame>>(emptyList())
-    var recentFrames: List<com.example.intonationtrainer.core.model.PitchFrame>
-        get() = _recentFrames.value
-        set(value) { _recentFrames.value = value }
-
-    // --- Audio Pipeline Setup ---
-
-    private val audioRecorderSource by lazy {
-        AudioRecorderSource(
-            sampleRate = 48000,
-            channelConfig = android.media.AudioFormat.CHANNEL_IN_STEREO,
-            bufferSize = 2048
-        )
+    private fun requestStart() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startCapture()
+        else { permissionPending = true; permission.launch(Manifest.permission.RECORD_AUDIO) }
     }
 
-    private val pitchDetector by lazy { AutocorrelationPitchDetector() }
-    private val pitchStream = PitchStream()
-
-    // --- Permission Handling ---
-
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val granted = permissions.entries.filter { it.value }.size >= 1
-        if (granted) startRecording() else {}
+    @Suppress("DEPRECATION")
+    private fun startCapture() {
+        val result = if (Build.VERSION.SDK_INT >= 26) {
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                .setOnAudioFocusChangeListener(focusListener).build()
+            focusRequest = request
+            audioManager.requestAudioFocus(request)
+        } else audioManager.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) session.start()
+        else session.fail("Audio is busy. Tap Retry when the other audio session ends.")
     }
 
-    private fun requestPermissions() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
-        } else {
-            startRecording()
-        }
+    @Suppress("DEPRECATION")
+    private fun abandonFocus() {
+        if (Build.VERSION.SDK_INT >= 26) focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        else audioManager.abandonAudioFocus(focusListener)
+        focusRequest = null
     }
 
-    private fun toggleRecording() {
-        if (isRecording) stopRecording() else requestPermissions()
+    private fun stop(message: String = "Ready to listen") { session.stop(message); abandonFocus() }
+    override fun onStop() {
+        permissionPending = false
+        stop("Listening stopped. Tap Start listening to begin again.")
+        super.onStop()
     }
-
-    private fun startRecording() {
-        val result = audioRecorderSource.startRecording()
-        if (!result.isSuccess) {}
-        _isRecording.value = true
-    }
-
-    private fun stopRecording() {
-        val result = audioRecorderSource.stopRecording()
-        if (result.isSuccess) {
-            _isRecording.value = false
-            pitchStream.clear()
-            _currentFrame.value = null
-            _recentFrames.value = emptyList()
-        }
-    }
-
-    // --- Audio Processing Thread ---
-
-    private val processingThread by lazy { thread(name = "PitchDetectionWorker") { processAudioLoop() } }
-
-    private fun processAudioLoop() {
-        while (!Thread.currentThread().isInterrupted) {
-            try {
-                val latestBuffer = audioRecorderSource.getLatestBuffer() ?: continue
-                if (latestBuffer.isEmpty()) continue
-
-                val analysisResult = pitchDetector.detectPitch(latestBuffer, 48000f)
-                val frame = PitchFrameConverter.createPitchFrame(
-                    samples = latestBuffer.copyOf(),
-                    sampleRate = 48000.0f,
-                    volumeDb = calculateVolumeDb(latestBuffer),
-                    detector = pitchDetector
-                )
-
-                pitchStream.addFrame(frame)
-                _currentFrame.value = frame
-                if (_recentFrames.value.size < 64) {
-                    _recentFrames.value = _recentFrames.value + listOf(frame)
-                } else {
-                    val updated = _recentFrames.value.toMutableList()
-                    updated.removeAt(0)
-                    updated.add(frame)
-                    _recentFrames.value = updated
-                }
-
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    private fun calculateVolumeDb(samples: ShortArray): Float {
-        if (samples.isEmpty()) return -60f
-        var sumSquared = 0.0
-        for (sample in samples) {
-            val normalized = sample.toFloat() / 32768.0f
-            sumSquared += normalized * normalized
-        }
-        val rms = kotlin.math.sqrt(sumSquared / samples.size.toDouble()).toFloat()
-        return (-20.0f * kotlin.math.log10(rms) + 94.0f).coerceIn(-90f, 0f)
-    }
-
+    override fun onDestroy() { capture.close(); super.onDestroy() }
 }

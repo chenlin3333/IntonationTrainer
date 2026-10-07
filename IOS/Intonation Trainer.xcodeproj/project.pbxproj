@@ -6,23 +6,27 @@
 	objectVersion = 100;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		AE9D6FB4540D1E875086456B /* Pods_Intonation_Trainer.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 616ABB542AEA19831F6E2EE9 /* Pods_Intonation_Trainer.framework */; };
-/* End PBXBuildFile section */
+
 
 /* Begin PBXFileReference section */
-		616ABB542AEA19831F6E2EE9 /* Pods_Intonation_Trainer.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Intonation_Trainer.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		7A787ABF7DBAD46BD42957A1 /* Pods-Intonation Trainer.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Intonation Trainer.debug.xcconfig"; path = "Target Support Files/Pods-Intonation Trainer/Pods-Intonation Trainer.debug.xcconfig"; sourceTree = "<group>"; };
-		A1D35A493B0A695B460CC22B /* Pods-Intonation Trainer.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Intonation Trainer.release.xcconfig"; path = "Target Support Files/Pods-Intonation Trainer/Pods-Intonation Trainer.release.xcconfig"; sourceTree = "<group>"; };
 		B856B9853074676300E63EF2 /* Intonation Trainer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Intonation Trainer.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+        ABCDEF123456789000000001 = {
+            isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+            membershipExceptions = ("App/Info.plist", "App/App.entitlements", Info.plist, AppDelegate.swift, SceneDelegate.swift);
+            target = B856B9843074676300E63EF2;
+        };
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B856B9873074676300E63EF2 /* IOS_Intonation_Trainer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				ABCDEF123456789000000001,
 			);
-			path = IOS_Intonation_Trainer;
+			path = Intonation_Trainer;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -31,7 +35,6 @@
 		B856B9823074676300E63EF2 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
-				AE9D6FB4540D1E875086456B /* Pods_Intonation_Trainer.framework in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -40,8 +43,6 @@
 		5375D9BA0A5E82F3C59EE66F /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				7A787ABF7DBAD46BD42957A1 /* Pods-Intonation Trainer.debug.xcconfig */,
-				A1D35A493B0A695B460CC22B /* Pods-Intonation Trainer.release.xcconfig */,
 			);
 			name = Pods;
 			path = Pods;
@@ -50,7 +51,6 @@
 		55750265D774AE8E2B618657 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				616ABB542AEA19831F6E2EE9 /* Pods_Intonation_Trainer.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -80,11 +80,9 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = B856B9903074676400E63EF2 /* Build configuration list for PBXNativeTarget "Intonation Trainer" */;
 			buildPhases = (
-				6882CEC261A906CF4DC2B814 /* [CP] Check Pods Manifest.lock */,
 				B856B9813074676300E63EF2 /* Sources */,
 				B856B9823074676300E63EF2 /* Frameworks */,
 				B856B9833074676300E63EF2 /* Resources */,
-				3284A8D35CC7D6A252B737EE /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -140,47 +138,7 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		3284A8D35CC7D6A252B737EE /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Intonation Trainer/Pods-Intonation Trainer-frameworks-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Intonation Trainer/Pods-Intonation Trainer-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Intonation Trainer/Pods-Intonation Trainer-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		6882CEC261A906CF4DC2B814 /* [CP] Check Pods Manifest.lock */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
-				"${PODS_ROOT}/Manifest.lock",
-			);
-			name = "[CP] Check Pods Manifest.lock";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-Intonation Trainer-checkManifestLockResult.txt",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
-/* End PBXShellScriptBuildPhase section */
+
 
 /* Begin PBXSourcesBuildPhase section */
 		B856B9813074676300E63EF2 /* Sources */ = {
@@ -243,7 +201,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -300,7 +258,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -312,7 +270,6 @@
 		};
 		B856B9913074676400E63EF2 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 7A787ABF7DBAD46BD42957A1 /* Pods-Intonation Trainer.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -320,12 +277,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_KEY_NSMicrophoneUsageDescription = "Microphone access lets you check your playing and practice intonation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -335,7 +293,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
@@ -345,7 +303,6 @@
 		};
 		B856B9923074676400E63EF2 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A1D35A493B0A695B460CC22B /* Pods-Intonation Trainer.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -353,12 +310,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_KEY_NSMicrophoneUsageDescription = "Microphone access lets you check your playing and practice intonation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = "$(RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET)";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -368,7 +326,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
