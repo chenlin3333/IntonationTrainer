@@ -6,19 +6,27 @@
 //
 
 import SwiftUI
+import AudioKit
+import AVFoundation
 
 struct ContentView: View {
+    @StateObject var audioManager = AudioManager()
+
     var body: some View {
         VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+            Text("Pitch: \(audioManager.tracker.frequency, specifier: "%.2f") Hz")
+                .font(.largeTitle)
+                .padding()
         }
-        .padding()
     }
 }
 
-#Preview {
-    ContentView()
+@main
+struct IntonationTrainerApp: App {
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+    }
 }
+
