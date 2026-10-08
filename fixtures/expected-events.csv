@@ -1,0 +1,9 @@
+scenario,notes,starts,ends
+sustained,69,0,780
+change,69;71,0;400,400;780
+repeated,69;69,0;400,400;780
+silence,69;69,0;500,280;780
+dropout,69,0,780
+transient,,,
+wrong_score,67;69;69;71,0;300;600;900,300;600;900;1180
+vibrato,69,0,780

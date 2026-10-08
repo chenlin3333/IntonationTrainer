@@ -9,11 +9,13 @@ import android.os.Looper
 import com.example.intonationtrainer.core.session.MicrophoneSession
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.log10
-import kotlin.math.sqrt
+import com.example.intonationtrainer.core.practice.AnalysisFrame
+import com.example.intonationtrainer.core.practice.PitchPipeline
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /** Each capture owns its recorder. A single worker releases it before starting another. */
-class AudioRecorderSource : MicrophoneSession.Capture {
+class AudioRecorderSource(private val onAnalysis: (AnalysisFrame) -> Unit = {}) : MicrophoneSession.Capture {
     private val worker = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private val generation = AtomicInteger()
@@ -37,20 +39,31 @@ class AudioRecorderSource : MicrophoneSession.Capture {
                 check(input.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Microphone could not start." }
                 post(onStarted)
                 val samples = ShortArray(2048)
-                var lastLevel = 0L
+                val latest = AtomicReference<AnalysisFrame?>()
+                val deliveryPending = AtomicBoolean(false)
+                val pipeline = PitchPipeline(input.sampleRate.toDouble()) { frame ->
+                    latest.set(frame)
+                    if (deliveryPending.compareAndSet(false, true)) {
+                        main.post {
+                            deliveryPending.set(false)
+                            if (generation.get() == token) latest.get()?.let {
+                                onLevel(it.levelDb.toFloat())
+                                onAnalysis(it)
+                            }
+                        }
+                    }
+                }
+                var lastRead = System.nanoTime()
                 while (generation.get() == token) {
                     if (Build.VERSION.SDK_INT >= 29 && input.activeRecordingConfiguration?.isClientSilenced == true) {
                         error("Microphone was interrupted by another app. Tap Retry when it is available.")
                     }
                     val count = input.read(samples, 0, samples.size, AudioRecord.READ_NON_BLOCKING)
                     check(count >= 0) { "Microphone capture failed ($count). Tap Retry." }
-                    if (count > 0 && System.nanoTime() - lastLevel >= 100_000_000L) {
-                        var energy = 0.0
-                        for (i in 0 until count) { val value = samples[i] / 32768.0; energy += value * value }
-                        val db = (20 * log10(sqrt(energy / count).coerceAtLeast(0.00003162))).toFloat().coerceIn(-90f, 0f)
-                        post { onLevel(db) }
-                        lastLevel = System.nanoTime()
-                    }
+                    if (count > 0) {
+                        lastRead = System.nanoTime()
+                        pipeline.accept(FloatArray(count) { samples[it] / 32768f })
+                    } else check(System.nanoTime() - lastRead < 500_000_000L) { "Microphone stopped delivering audio. Tap Retry." }
                     Thread.sleep(10)
                 }
             } catch (error: Exception) {

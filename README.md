@@ -4,7 +4,9 @@ A mobile app that helps musicians practice intonation by showing the note they a
 
 ## Project Status
 
-Both platforms now have a microphone-check shell with permission handling, start/stop, an input-level meter, and retryable errors. Android lifecycle unit tests cover repeated sessions and stale callbacks. The requirements below describe the intended MVP, not verified current capabilities: pitch detection and all three practice modes are not connected to these shells yet. Physical-device audio and interruption validation remain required.
+Both Android and iOS now implement free tuning, selected-note exercises, score following for three bundled exercises, automatic note-event segmentation, and a rolling history of completed notes. Microphone capture, permission handling, interruption recovery, and on-device pitch analysis are connected to the UI.
+
+The Kotlin and Swift engines run shared deterministic fixtures. Software implementation is complete for the scoped features; **physical-device latency, real-instrument behavior, and interruption checks are still release gates**, so the MVP is not yet declared validated for release. See [validation evidence and remaining checks](docs/VALIDATION.md).
 
 **Release requirement:** the MVP includes both Android and iOS, with equivalent tuning, selected-note exercises, score following, and automatic note-event segmentation. Both platforms must pass the acceptance criteria before the MVP is complete.
 
@@ -106,9 +108,9 @@ UI ← Observable session state ← Exercise / score follower + Recent notes
 
 - **Capture:** Android `AudioRecord` and an iOS `AVAudioEngine` input-node tap. Prefer mono PCM and pass the actual capture sample rate through the pipeline.
 - **Analysis:** consume each window once on a background worker. Use a bounded buffer and discard outdated work if processing falls behind.
-- **Detector:** a platform-independent interface that accepts samples and sample rate and returns frequency plus confidence, or no reliable pitch. The algorithm remains an implementation choice until it passes the acceptance fixtures; the existing FFT code is not a validated baseline.
-- **Windowing:** choose the analysis window and hop size to support E2 while meeting the response target. Do not assume a fixed 20 ms window is sufficient for the entire range.
-- **Validity:** use measured RMS level and detector confidence to reject unreliable estimates before note mapping or history. Tune thresholds against the fixtures and physical-device recordings.
+- **Detector:** a platform-independent YIN normalized-difference implementation accepts samples and sample rate and returns frequency plus confidence, or no reliable pitch. Kotlin and Swift use matching algorithms and shared fixtures. The legacy FFT implementation has been removed.
+- **Windowing:** 2,048 analysis samples with a 512-sample hop. At 48 kHz capture, pairwise averaging reduces analysis to 24 kHz, giving an approximately 85 ms window and 21 ms hop. Other input rates retain their actual sample rate in calculations; 44.1 kHz is covered by fixtures.
+- **Validity:** reject levels below −55 dBFS, confidence below 0.85, and notes outside E2–C6. Confirm event boundaries after 100 ms, retain events through dropouts shorter than 150 ms, and use a 65-cent boundary hysteresis. A 6 dB envelope dip/rise with at least a 3 dB hop rise and a 180 ms onset cooldown identifies clear rearticulations. These initial thresholds pass the synthetic fixtures; instrument-specific tuning remains part of device validation.
 - **Practice model:** represent bundled scores as ordered notes with stable IDs, MIDI pitch, and notation duration. Keep selected targets, score position, hold timers, and confirmed event IDs independent of UI rendering. Store the sounding event's feedback target separately from the next expected score position. Selected-note success stays latched until a new articulation is confirmed. Manual navigation must not reuse an already-consumed event. Every listening start resets score position and attempt state.
 - **Segmentation:** maintain an active note event, confirm boundaries using pitch stability and amplitude onsets, and feed event confirmations to score following and completed events to bounded history. Use the same fixtures and target-reference rules on both platforms.
 - **Presentation:** apply modest smoothing to valid readings without delaying note changes excessively. Keep session state and processing outside the UI; publish observable state through an Android ViewModel and an iOS observable state model.
@@ -129,6 +131,8 @@ cents          = 1200 * log2(f / targetHz)
 Negative cents means flat; positive cents means sharp. Silence and unreliable detections are represented explicitly as no pitch, rather than a sentinel cents value that could be mistaken for an accurate note.
 
 ## Implementation Milestones
+
+Milestones 1–5 are implemented and covered by the software checks below. Milestone 6 remains open for physical-device acceptance.
 
 1. **Runnable platform shells:** fix Android build issues and the iOS app entry point/dependencies; implement permissions, explicit session states, and repeatable microphone start/stop on both platforms.
 2. **Verified pitch engines:** correct note mapping, implement detector interfaces, and pass shared deterministic accuracy and invalid-input fixtures independently of the microphones.
@@ -182,9 +186,24 @@ xcodebuild -project "IOS/Intonation Trainer.xcodeproj" \
 
 To run on an iPhone, select your signing team in Xcode and choose the connected device.
 
-### Shell Validation
+### Automated Validation
 
-Run Android lifecycle tests with `./gradlew testDebugUnitTest` from `Android/` using the Java runtime above. The tests use a fake capture source to verify state transitions; they do not replace hardware microphone checks.
+From the repository root, run `bash scripts/check.sh` to build both apps and run both core test suites. It requires macOS, the documented Android SDK/JDK, and Xcode. No microphone access is needed for core tests.
+
+Run Android UI tests on a booted emulator with `./gradlew connectedDebugAndroidTest` from `Android/`. Run iOS UI tests through the shared **Intonation Trainer** scheme's Test action in Xcode, or:
+
+```bash
+xcodebuild -project "IOS/Intonation Trainer.xcodeproj" \
+  -scheme "Intonation Trainer" \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+  -derivedDataPath /tmp/intonation-mvp-ios CODE_SIGNING_ALLOWED=NO test
+```
+
+Choose a simulator name installed on your machine. Both UI suites exercise mode selection, target selection, and score navigation without requesting microphone permission.
+
+The core tests cover pitch mapping, 114 generated-tone cases, silence/noise rejection, event boundaries, repeated articulation, vibrato, exercise holds, wrong octaves, score progression, manual recovery, completion, and bounded history. Android also tests capture-session lifecycle with a fake source. Fixture definitions are in [fixtures/README.md](fixtures/README.md).
+
+### Physical-Device Validation
 
 On each physical platform, verify:
 
@@ -194,44 +213,44 @@ On each physical platform, verify:
 4. Background the app or interrupt audio; confirm listening stops and requires an explicit restart.
 5. Return from Settings or an interruption and retry; confirm no stale callback restarts a stopped session.
 
-The shell reports dBFS input level only. Note detection, score position, exercise attempts, and note history will be connected in subsequent milestones.
+Also complete the pitch-latency and instrument checklist in [docs/VALIDATION.md](docs/VALIDATION.md). Synthetic tests and simulator navigation do not establish acoustic performance on phones.
 
 ## Project Structure
 
-### Android
-```
-Android/
-├── app/src/main/java/com/example/intonationtrainer/
-│   ├── core/
-│   │   ├── audio/           # Audio capture & processing pipeline
-│   │   │   └── AudioRecorderSource.kt
-│   │   ├── session/         # Microphone session states and callback ownership
-│   │   ├── model/          # Domain models (PitchFrame, IntonationStats)
-│   │   │   └── PitchData.kt
-│   │   └── pitchdetector/  # Core pitch detection algorithms
-│   │       └── AutocorrelationPitchDetector.kt
-│   ├── ui/
-│   │   └── screens/
-│   │       └── pitchvisualizer/PitchVisualizerScreen.kt
-│   └── MainActivity.kt     # Main activity + pipeline orchestration
-├── app/build.gradle.kts    # App-level build config
-├── settings.gradle.kts     # Project-level settings
-└── gradle/libs.versions.toml  # Version catalog
-```
+```text
+Android/app/src/main/java/com/example/intonationtrainer/
+├── MainActivity.kt           # Permissions, audio focus, Android lifecycle
+├── TrainerViewModel.kt       # Observable UI state and practice-session ownership
+├── core/
+│   ├── audio/AudioRecorderSource.kt   # PCM capture and background analysis
+│   ├── session/MicrophoneSession.kt  # Capture state and stale-callback protection
+│   └── practice/
+│       ├── PitchPipeline.kt  # Streaming windows, YIN, RMS, amplitude onsets
+│       └── PracticeEngine.kt # Notes, scores, segmentation, holds, score following
+└── ui/
+    ├── screens/pitchvisualizer/TrainerScreen.kt # Modes, meter, staff, history
+    └── theme/                # Compose colors and typography
 
-### iOS
-```
 IOS/
-├── Intonation Trainer.xcodeproj/
-├── Intonation Trainer.xcworkspace/  # Opens the same standalone project
+├── Intonation Trainer.xcodeproj/ # App, UI-test target, and shared scheme
+├── Package.swift             # Runs platform-independent core tests on macOS
+├── CoreTests/                # Swift tests against shared fixtures
+├── UITests/                  # SwiftUI navigation checks and screenshots
 └── Intonation_Trainer/
-    ├── Intonation_TrainerApp.swift # SwiftUI app entry point
-    ├── ContentView.swift           # Microphone-check screen
-    ├── MicrophoneSession.swift     # Permission, audio engine, and lifecycle
+    ├── Intonation_TrainerApp.swift
+    ├── ContentView.swift     # Modes, cents meter, staff notation, history
+    ├── MicrophoneSession.swift # AVAudioEngine, bounded worker, UI state
+    ├── Core/
+    │   ├── PitchPipeline.swift
+    │   └── PracticeEngine.swift
     └── Assets.xcassets/
+
+fixtures/                     # Shared tone recipes, labeled events, scores
+scripts/check.sh              # Builds and core tests for both platforms
+docs/VALIDATION.md            # Evidence, reproducible commands, device checklist
 ```
 
-Legacy UIKit delegates and plist files remain excluded from the iOS target. The target generates its Info.plist with the microphone usage description in the project settings.
+Legacy UIKit delegates and plist files remain excluded from the iOS target. The target generates its Info.plist with the microphone usage description in the project settings. The active app has no CocoaPods dependencies.
 
 ## License
 
